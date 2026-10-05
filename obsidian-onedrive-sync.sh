@@ -44,18 +44,14 @@ sync_vaults() {
     # Stop OneDrive-Monitor service temporarily
     systemctl --user stop "$ONEDRIVE_SERVICE"
 
-    # Falls der Service noch nicht vollständig beendet ist.
+    # Wait until the OneDrive process has fully stopped
     while pgrep -x onedrive >/dev/null 2>&1; do
         sleep 1
     done
 
-    # If interrupted, clean up
+    # If interrupted, restart OneDrive service
     cleanup() {
-        echo "Reinstating .nosync protection..."
-        for vault in "${VAULTS[@]}"; do
-            touch "$vault/.nosync"
-        done
-
+        echo "Restarting OneDrive monitor..."
         systemctl --user start "$ONEDRIVE_SERVICE"
     }
 
@@ -69,18 +65,19 @@ sync_vaults() {
         echo "Sync: $relative"
         echo "========================================"
 
-        rm -f "$vault/.nosync"
-
+        # Keep .nosync in place permanently.
+        # The manual sync does not use --check-for-nosync,
+        # so the vault can still be synchronized explicitly.
         if ! onedrive --sync --single-directory "$relative"; then
             echo "ERROR syncing: $relative"
+        else
+            echo "Successfully synced: $relative"
         fi
-
-        # Reinstate .nosync here
-        touch "$vault/.nosync"
     done
 
     trap - EXIT INT TERM
 
+    # Restart OneDrive-Monitor service
     systemctl --user start "$ONEDRIVE_SERVICE"
 
     echo
@@ -106,7 +103,7 @@ while true; do
         current_state="closed"
     fi
 
-    # Only react when chaning from open to closed
+    # Only react when changing from open to closed
     if [[ "$previous_state" == "open" && "$current_state" == "closed" ]]; then
         sync_vaults
     fi
