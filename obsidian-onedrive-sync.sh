@@ -5,6 +5,7 @@ set -u
 ONEDRIVE_DIR="$HOME/OneDrive"
 ONEDRIVE_SERVICE="onedrive.service"
 CHECK_INTERVAL=5
+VAULT_SCAN_INTERVAL=30
 
 declare -a VAULTS=()
 
@@ -94,13 +95,28 @@ if is_obsidian_running; then
 fi
 
 echo "Obsidian-OneDrive helper is running."
-echo "initial state: $previous_state"
+echo "Initial state: $previous_state"
+
+last_vault_scan=0
 
 while true; do
     if is_obsidian_running; then
+        if [[ "$previous_state" == "closed" ]]; then
+            echo "Obsidian opened."
+        fi
         current_state="open"
     else
         current_state="closed"
+    fi
+
+    # Check for newly created Obsidian vaults periodically while Obsidian is open
+    if [[ "$current_state" == "open" ]]; then
+        current_time=$(date +%s)
+
+        if (( current_time - last_vault_scan >= VAULT_SCAN_INTERVAL )); then
+            setup_nosync
+            last_vault_scan="$current_time"
+        fi
     fi
 
     # Only react when changing from open to closed
